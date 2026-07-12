@@ -1,0 +1,74 @@
+name: CI Tests
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - acc
+      - prd
+  push:
+    branches:
+      - dev
+      - acc
+      - prd
+
+jobs:
+  validate-pr-flow:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate source and target branches
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          echo "Validating PR from '${HEAD_BRANCH}' into '${BASE_BRANCH}'"
+
+          case "${BASE_BRANCH}" in
+            dev)
+              case "${HEAD_BRANCH}" in
+                feature/*|chore/*|bug/*|fix/*|hotfix/*|refactor/*|test/*|docs/*|ci/*)
+                  exit 0
+                  ;;
+                *)
+                  echo "PRs into dev must come from a work branch such as feature/*, chore/*, bug/*, fix/*, hotfix/*, refactor/*, test/*, docs/*, or ci/*."
+                  exit 1
+                  ;;
+              esac
+              ;;
+            acc)
+              if [ "${HEAD_BRANCH}" = "dev" ]; then
+                exit 0
+              fi
+              echo "PRs into acc must come from dev."
+              exit 1
+              ;;
+            prd)
+              if [ "${HEAD_BRANCH}" = "acc" ]; then
+                exit 0
+              fi
+              echo "PRs into prd must come from acc."
+              exit 1
+              ;;
+            *)
+              echo "Unexpected base branch: ${BASE_BRANCH}"
+              exit 1
+              ;;
+          esac
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run pytest
+        run: pytest -q test

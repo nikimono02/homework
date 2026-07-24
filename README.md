@@ -127,11 +127,89 @@ small Azure environment, runs an Azure Resource Graph query from a one-shot
 Azure Container Instance, and stores the final query result as a CSV file in a
 Storage Account blob container.
 
-Create the demo after logging in with the Azure CLI:
+### What Terraform creates
+
+- Resource group
+- Storage account
+- Private blob container for CSV exports
+- User-assigned managed identity
+- RBAC permissions for reading Azure Resource Graph and writing Blob Storage
+- One-shot Azure Container Instance that runs the query and uploads the CSV
+
+### Step-by-step tutorial
+
+Run these commands one by one from the repository root.
+
+Log in with the Azure account:
 
 ```sh
-az login
-./scripts/apply_azure_demo.sh
+az login --username "user@email.nl"
+```
+
+List the subscriptions available to your account:
+
+```sh
+az account list --query "[].{name:name, id:id, state:state, isDefault:isDefault}" --output table
+```
+
+Select the subscription you want to work on:
+
+```sh
+az account set --subscription "<subscription-id-or-name>"
+```
+
+Confirm the selected account and subscription:
+
+```sh
+az account show --query "{user:user.name, subscription:name, id:id}" --output table
+```
+
+Register the Azure resource providers used by the demo:
+
+```sh
+az provider register --namespace Microsoft.ContainerInstance
+az provider register --namespace Microsoft.ManagedIdentity
+az provider register --namespace Microsoft.ResourceGraph
+az provider register --namespace Microsoft.Storage
+```
+
+Export the subscription ID for Terraform:
+
+```sh
+export ARM_SUBSCRIPTION_ID="$(az account show --query id --output tsv)"
+export TF_VAR_subscription_id="$ARM_SUBSCRIPTION_ID"
+```
+
+Initialize Terraform:
+
+```sh
+terraform -chdir=terraform init
+```
+
+Validate the Terraform files:
+
+```sh
+terraform -chdir=terraform validate
+```
+
+Create and review a Terraform plan:
+
+```sh
+terraform -chdir=terraform plan -out=tfplan
+```
+
+Apply the approved plan:
+
+```sh
+terraform -chdir=terraform apply tfplan
+```
+
+Check the query runner logs:
+
+```sh
+az container logs \
+  --resource-group "$(terraform -chdir=terraform output -raw resource_group_name)" \
+  --name tfquerydemo-query-runner
 ```
 
 Download the generated CSV:
@@ -140,7 +218,40 @@ Download the generated CSV:
 ./scripts/download_azure_demo_csv.sh
 ```
 
-When you are ready to remove the Azure resources, use:
+Inspect the first rows:
+
+```sh
+sed -n '1,20p' terraform/output/resource-inventory.csv
+```
+
+Destroy all Terraform-managed Azure resources when you are done:
+
+```sh
+terraform -chdir=terraform destroy
+```
+
+The destroy wrapper adds an extra safety prompt before calling Terraform:
+
+```sh
+./scripts/destroy_azure_demo.sh
+```
+
+### Helper script shortcut
+
+After logging in and selecting the subscription, you can also create the demo
+with the wrapper script:
+
+```sh
+./scripts/apply_azure_demo.sh
+```
+
+Download the generated CSV with:
+
+```sh
+./scripts/download_azure_demo_csv.sh
+```
+
+Destroy the demo resources with:
 
 ```sh
 ./scripts/destroy_azure_demo.sh

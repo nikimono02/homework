@@ -1,0 +1,10 @@
+location    = "eastus"
+name_prefix = "tfquerydemo"
+
+# Optional: replace the default inventory query.
+# resource_graph_query = <<KQL
+# Resources
+# | where type =~ 'microsoft.storage/storageaccounts'
+# | project name, type, location, resourceGroup, subscriptionId
+# | order by name asc
+# KQL

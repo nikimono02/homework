@@ -1,0 +1,103 @@
+set -eu
+
+echo "Logging in with the user-assigned managed identity..."
+az login --identity --client-id "${managed_identity_client_id}" >/dev/null
+
+if [ "${rbac_initial_delay_seconds}" -gt 0 ]; then
+  echo "Waiting ${rbac_initial_delay_seconds} seconds for RBAC propagation..."
+  sleep "${rbac_initial_delay_seconds}"
+fi
+
+cat > /tmp/resource_graph_query.kql <<'KQL'
+${query}
+KQL
+
+echo "Running Azure Resource Graph query..."
+python3 - <<'PY'
+import json
+
+with open("/tmp/resource_graph_query.kql", "r", encoding="utf-8") as query_file:
+    query = query_file.read()
+
+payload = {
+    "subscriptions": ["${subscription_id}"],
+    "query": query,
+}
+
+with open("/tmp/resource_graph_request.json", "w", encoding="utf-8") as request_file:
+    json.dump(payload, request_file)
+PY
+
+for attempt in 1 2 3 4 5; do
+  if az rest \
+    --method post \
+    --url "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01" \
+    --body @/tmp/resource_graph_request.json \
+    --output json > /tmp/resource_graph_response.json; then
+    break
+  fi
+
+  echo "Resource Graph query failed on attempt $attempt; retrying in 20 seconds..."
+  sleep 20
+done
+
+if [ ! -s /tmp/resource_graph_response.json ]; then
+  echo "Resource Graph query did not return a response."
+  exit 1
+fi
+
+export CSV_FILE="/tmp/${csv_file_name}"
+
+python3 - <<'PY'
+import csv
+import json
+import os
+
+with open("/tmp/resource_graph_response.json", "r", encoding="utf-8") as response_file:
+    payload = json.load(response_file)
+
+rows = payload.get("data", [])
+preferred_columns = ["name", "type", "location", "resourceGroup", "subscriptionId"]
+columns = []
+
+for column in preferred_columns:
+    if any(column in row for row in rows):
+        columns.append(column)
+
+for row in rows:
+    for column in row:
+        if column not in columns:
+            columns.append(column)
+
+if not columns:
+    columns = ["message"]
+    rows = [{"message": "No rows returned by the query."}]
+
+with open(os.environ["CSV_FILE"], "w", newline="", encoding="utf-8") as csv_file:
+    writer = csv.DictWriter(csv_file, fieldnames=columns, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+
+print(f"Wrote {len(rows)} row(s) to {os.environ['CSV_FILE']}.")
+PY
+
+echo "Uploading CSV to Blob Storage..."
+for attempt in 1 2 3 4 5; do
+  if az storage blob upload \
+    --auth-mode login \
+    --account-name "${storage_account_name}" \
+    --container-name "${container_name}" \
+    --name "${blob_name}" \
+    --file "$CSV_FILE" \
+    --content-type "text/csv" \
+    --overwrite true; then
+    echo "CSV uploaded to ${storage_account_name}/${container_name}/${blob_name}."
+    exit 0
+  fi
+
+  echo "Blob upload failed on attempt $attempt; retrying in 20 seconds..."
+  sleep 20
+done
+
+echo "Could not upload the CSV after multiple attempts."
+exit 1

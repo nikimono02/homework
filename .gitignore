@@ -12,3 +12,17 @@ __pycache__/
 .ruff_cache/
 .cache/
 cache/
+
+# Terraform state and local generated files
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+terraform/output/

@@ -17,6 +17,7 @@ same image and uses it to execute the test suite automatically.
 5. [Local Development](#local-development)
 6. [Continuous Integration](#continuous-integration)
 7. [Project Structure](#project-structure)
+8. [Azure Terraform Query-to-CSV Demo](#azure-terraform-query-to-csv-demo)
 
 ## Features
 
@@ -119,6 +120,34 @@ development flow. The CI test job:
 
 This verifies both the Docker build and the tests in the same environment.
 
+## Azure Terraform Query-to-CSV Demo
+
+This repo also includes a Terraform showcase under `terraform/`. It creates a
+small Azure environment, runs an Azure Resource Graph query from a one-shot
+Azure Container Instance, and stores the final query result as a CSV file in a
+Storage Account blob container.
+
+Create the demo after logging in with the Azure CLI:
+
+```sh
+az login
+./scripts/apply_azure_demo.sh
+```
+
+Download the generated CSV:
+
+```sh
+./scripts/download_azure_demo_csv.sh
+```
+
+When you are ready to remove the Azure resources, use:
+
+```sh
+./scripts/destroy_azure_demo.sh
+```
+
+More details and customization options are in `terraform/README.md`.
+
 ## Project Structure
 
 ```text
@@ -128,6 +157,8 @@ This verifies both the Docker build and the tests in the same environment.
 |   `-- pages.yml          # GitHub Pages deployment workflow
 |-- test/
 |   `-- test_sum.py        # Test suite
+|-- terraform/             # Azure query-to-CSV Terraform demo
+|-- scripts/               # Demo helper scripts
 |-- .dockerignore          # Files excluded from the Docker build context
 |-- .gitignore             # Files excluded from Git
 |-- Dockerfile             # Python image and default test command
